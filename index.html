@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grok Topic Cards • Your Personal Learning Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -15,6 +15,31 @@
         .chat-bubble-user { background: linear-gradient(90deg, #00f0ff, #00b8ff); color: #000; }
         .modal-content { animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
         @keyframes modalPop { from { opacity: 0; transform: scale(0.95) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        /* When Typography CDN fails to load, keep markdown readable (Preflight strips list markers & heading sizes). */
+        .chat-md :where(h1,h2,h3,h4,h5,h6) { font-weight: 600; line-height: 1.3; color: #fafafa; margin: 0.65em 0 0.35em; }
+        .chat-md :where(h1) { font-size: 1.35rem; }
+        .chat-md :where(h2) { font-size: 1.2rem; }
+        .chat-md :where(h3) { font-size: 1.08rem; }
+        .chat-md :where(h4,h5,h6) { font-size: 1rem; }
+        .chat-md :where(h1:first-child,h2:first-child,h3:first-child) { margin-top: 0; }
+        .chat-md :where(p) { margin: 0.5em 0; }
+        .chat-md :where(p:first-child) { margin-top: 0; }
+        .chat-md :where(p:last-child) { margin-bottom: 0; }
+        .chat-md :where(ul,ol) { margin: 0.5em 0; padding-left: 1.35em; }
+        .chat-md :where(ul) { list-style-type: disc; }
+        .chat-md :where(ol) { list-style-type: decimal; }
+        .chat-md :where(li) { margin: 0.2em 0; }
+        .chat-md :where(li > ul,li > ol) { margin: 0.25em 0; }
+        .chat-md :where(blockquote) { border-left: 3px solid rgb(34 211 238); padding-left: 1em; margin: 0.75em 0; color: #a1a1aa; }
+        .chat-md :where(pre) { margin: 0.6em 0; padding: 0.75rem 1rem; border-radius: 0.75rem; background: #18181b; overflow-x: auto; font-size: 0.85em; }
+        .chat-md :where(code) { font-size: 0.9em; }
+        .chat-md :where(p code,li code) { background: #27272a; padding: 0.12em 0.35em; border-radius: 0.35rem; }
+        .chat-md :where(pre code) { background: transparent; padding: 0; font-size: inherit; }
+        .chat-md :where(a) { color: #22d3ee; text-decoration: underline; text-underline-offset: 2px; }
+        .chat-md :where(hr) { border-color: #3f3f46; margin: 1em 0; }
+        .chat-md :where(table) { width: 100%; font-size: 0.9em; margin: 0.6em 0; border-collapse: collapse; }
+        .chat-md :where(th,td) { border: 1px solid #3f3f46; padding: 0.35em 0.5em; text-align: left; }
+        .chat-md :where(th) { background: #27272a; font-weight: 600; }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 font-sans">
@@ -182,8 +207,8 @@
                 <span class="text-xs uppercase tracking-widest bg-cyan-400 text-black px-3 py-0.5 rounded-3xl">Learned interests</span>
             </div>
 
-            <!-- Chat messages -->
-            <div id="chatMessages" class="flex-1 overflow-auto p-6 space-y-8 bg-[radial-gradient(#27272a_1px,transparent_1px)] bg-[length:40px_40px]">
+            <!-- Chat messages: min-h-0 so flex-1 can shrink and overflow-auto scrolls (otherwise only the top bubble is visible). -->
+            <div id="chatMessages" class="flex-1 min-h-0 overflow-y-auto p-6 space-y-8 bg-[radial-gradient(#27272a_1px,transparent_1px)] bg-[length:40px_40px]">
                 <!-- Populated by JS -->
             </div>
 
@@ -305,7 +330,8 @@
             }
 
             const data = await res.json()
-            return data.choices[0].message.content.trim()
+            const raw = data.choices?.[0]?.message?.content
+            return raw == null ? '' : String(raw).trim()
         }
 
         // ====================== COMPRESSION (the smart part) ======================
@@ -447,23 +473,33 @@ Take into account everything I have expressed interest in during previous conver
             const conv = conversations[currentChatCardId] || []
 
             conv.forEach(msg => {
-                const div = document.createElement('div')
-                div.className = msg.role === 'user' 
+                const row = document.createElement('div')
+                row.className = msg.role === 'user' 
                     ? 'flex justify-end' 
                     : 'flex justify-start'
 
-                const bubble = document.createElement('div')
-                bubble.className = msg.role === 'user' 
-                    ? 'chat-bubble-user max-w-[75%] px-6 py-4 rounded-3xl rounded-br-none text-black' 
-                    : 'bg-zinc-800 max-w-[75%] px-6 py-4 rounded-3xl rounded-bl-none'
+                const cap = document.createElement('div')
+                cap.className = 'max-w-[75%] min-w-0'
 
-                if (msg.role === 'assistant') {
-                    bubble.innerHTML = marked.parse(msg.content)
+                const bubble = document.createElement('div')
+                if (msg.role === 'user') {
+                    bubble.className = 'chat-bubble-user px-6 py-4 rounded-3xl rounded-br-none text-black'
+                    bubble.textContent = msg.content == null ? '' : String(msg.content)
+                    cap.appendChild(bubble)
                 } else {
-                    bubble.textContent = msg.content
+                    bubble.className = 'chat-md bg-zinc-800 px-6 py-4 rounded-3xl rounded-bl-none prose prose-invert prose-sm max-w-none w-full prose-p:leading-relaxed prose-headings:scroll-mt-4 prose-ul:list-disc prose-ol:list-decimal prose-li:marker:text-zinc-400'
+                    const text = msg.content == null ? '' : String(msg.content)
+                    try {
+                        bubble.innerHTML = marked.parse(text)
+                    } catch (e) {
+                        console.warn('Markdown render failed', e)
+                        bubble.textContent = text
+                    }
+                    cap.appendChild(bubble)
                 }
-                div.appendChild(bubble)
-                container.appendChild(div)
+
+                row.appendChild(cap)
+                container.appendChild(row)
             })
 
             // Scroll to bottom
@@ -506,10 +542,12 @@ Take into account everything I have expressed interest in during previous conver
         }
 
         function refreshCurrentChatCard() {
+            const id = currentChatCardId
             hideModals()
             setTimeout(() => {
-                refreshCardContent(currentChatCardId, true)
-                openChat(currentChatCardId)
+                if (!id) return
+                refreshCardContent(id, true)
+                openChat(id)
             }, 400)
         }
 
@@ -556,7 +594,7 @@ Take into account everything I have expressed interest in during previous conver
                         </div>
                     </div>
 
-                    <div class="flex-1 prose prose-invert text-sm line-clamp-6 mb-6" style="max-height: 210px;">
+                    <div class="flex-1 chat-md prose prose-invert prose-sm max-w-none text-sm line-clamp-6 mb-6" style="max-height: 210px;">
                         ${previewHTML}
                     </div>
 
@@ -754,6 +792,9 @@ Take into account everything I have expressed interest in during previous conver
 
         // ====================== BOOTSTRAP ======================
         document.addEventListener('DOMContentLoaded', () => {
+            if (typeof marked !== 'undefined' && typeof marked.use === 'function') {
+                marked.use({ gfm: true })
+            }
             initializeTailwind().config({ theme: { extend: {} } })
             loadData()
             renderCards()
