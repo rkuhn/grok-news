@@ -437,37 +437,6 @@
             }
 
             if (sanitizeConversations()) saveData()
-
-            // First-time demo cards
-            if (cards.length === 0) {
-                cards = [
-                    {
-                        id: 'demo-1',
-                        title: 'AI & Research',
-                        topic: 'Artificial Intelligence',
-                        initialQuestion: 'What are the most exciting recent breakthroughs in AI research that a curious hobbyist should know about?',
-                        contextSummary: '',
-                        lastUpdated: Date.now() - 86400000 * 3
-                    },
-                    {
-                        id: 'demo-2',
-                        title: 'European Politics',
-                        topic: 'Politics • Europe',
-                        initialQuestion: 'Give me a concise overview of the current political situation in the EU, focusing on policy areas that will matter in the next 12 months.',
-                        contextSummary: '',
-                        lastUpdated: Date.now() - 86400000 * 2
-                    },
-                    {
-                        id: 'demo-3',
-                        title: 'Climate Tech',
-                        topic: 'Climate & Energy',
-                        initialQuestion: 'What are the most promising climate-tech startups and technologies that could realistically scale in the next decade?',
-                        contextSummary: '',
-                        lastUpdated: Date.now() - 86400000
-                    }
-                ]
-                saveData()
-            }
         }
 
         function saveData() {
