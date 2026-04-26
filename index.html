@@ -592,6 +592,13 @@
             return raw == null ? '' : String(raw).trim()
         }
 
+        /** Included in every Grok system message so answers stay time-aware. */
+        function grokSystemDateContext() {
+            const d = new Date()
+            const local = d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+            return `Current date: ${local} (ISO ${d.toISOString().slice(0, 10)}).`
+        }
+
         // ====================== COMPRESSION (the smart part) ======================
         async function compressConversation(cardId) {
             const conv = conversations[cardId] || []
@@ -602,7 +609,9 @@
 
             const history = conv.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')
 
-            const systemPrompt = `You are a context compressor for a personal topic dashboard.
+            const systemPrompt = `${grokSystemDateContext()}
+
+You are a context compressor for a personal topic dashboard.
 Summarize the ENTIRE conversation below into ONE concise paragraph (maximum 140 words).
 Focus ESPECIALLY on:
 • The user's expressed interests, preferences, and what they want to see more of
@@ -674,10 +683,13 @@ Original question: ${card.initialQuestion}`
             setCardRefreshPhase(cardId, 'fetch')
 
             // Build fresh personalized query
-            const systemMessage = `You are a world-class expert on ${card.topic}.
+            const systemMessage = `${grokSystemDateContext()}
+
+You are a world-class expert on ${card.topic}.
 Use the following user context to personalize your answer as much as possible:
 ${summary || 'No prior context yet.'}
 
+Provide links to relevant sources where appropriate.
 Stay factual, up-to-date, and insightful.`
 
             const userMessage = `${card.initialQuestion}
@@ -866,7 +878,7 @@ Take into account everything I have expressed interest in during previous conver
             const card = cards.find(c => c.id === cardId)
             const history = conversations[cardId]
             const messages = [
-                { role: 'system', content: `You are an expert on ${card.topic}. Keep the conversation going naturally.` },
+                { role: 'system', content: `${grokSystemDateContext()}\n\nYou are an expert on ${card.topic}. Keep the conversation going naturally.` },
                 ...history
             ]
 
