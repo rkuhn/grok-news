@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grok Topic Cards • Your Personal Learning Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap');
+        :root { --tw-color-primary: #00f0ff; }
+        .card-hover { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 25px 50px -12px rgb(0 240 255 / 0.15); }
+        .chat-bubble-user { background: linear-gradient(90deg, #00f0ff, #00b8ff); color: #000; }
+        .modal-content { animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes modalPop { from { opacity: 0; transform: scale(0.95) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 font-sans">
+    <!-- Top Navigation -->
+    <nav class="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center sticky top-0 z-50">
+        <div class="flex items-center gap-x-3 cursor-pointer" onclick="toggleMenu()">
+            <div class="w-9 h-9 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-2xl flex items-center justify-center">
+                <i data-lucide="brain" class="w-5 h-5 text-white"></i>
+            </div>
+            <span class="font-semibold text-2xl tracking-tighter">Grok Cards</span>
+        </div>
+
+        <div class="flex-1"></div>
+
+        <!-- Menu Button -->
+        <button onclick="toggleMenu()" 
+                class="flex items-center justify-center w-10 h-10 hover:bg-zinc-800 rounded-2xl transition-colors">
+            <i data-lucide="menu" class="w-6 h-6"></i>
+        </button>
+    </nav>
+
+    <!-- Dropdown Menu -->
+    <div id="menuDropdown" class="hidden absolute top-16 left-6 bg-zinc-900 border border-zinc-700 rounded-3xl shadow-2xl py-2 w-72 z-[100]">
+        <div onclick="showCustomizeModal()" class="flex items-center gap-x-3 px-6 py-3 hover:bg-zinc-800 cursor-pointer">
+            <i data-lucide="edit-3" class="w-5 h-5 text-cyan-400"></i>
+            <div>
+                <div class="font-medium">Customize Cards</div>
+                <div class="text-xs text-zinc-400">Add, edit, or delete topics</div>
+            </div>
+        </div>
+        <div onclick="refreshAllCards()" class="flex items-center gap-x-3 px-6 py-3 hover:bg-zinc-800 cursor-pointer">
+            <i data-lucide="refresh-cw" class="w-5 h-5 text-cyan-400"></i>
+            <div>
+                <div class="font-medium">Refresh All Cards</div>
+                <div class="text-xs text-zinc-400">Smart refresh with learned interests</div>
+            </div>
+        </div>
+        <div onclick="openSettings()" class="flex items-center gap-x-3 px-6 py-3 hover:bg-zinc-800 cursor-pointer">
+            <i data-lucide="key" class="w-5 h-5 text-cyan-400"></i>
+            <div>
+                <div class="font-medium">API Settings</div>
+                <div class="text-xs text-zinc-400">Manage xAI key &amp; model</div>
+            </div>
+        </div>
+        <div class="border-t border-zinc-700 my-1"></div>
+        <div onclick="exportData()" class="flex items-center gap-x-3 px-6 py-3 hover:bg-zinc-800 cursor-pointer text-sm">
+            Export all data
+        </div>
+        <div onclick="importData()" class="flex items-center gap-x-3 px-6 py-3 hover:bg-zinc-800 cursor-pointer text-sm">
+            Import data
+        </div>
+        <div onclick="resetAllData()" class="flex items-center gap-x-3 px-6 py-3 hover:bg-red-950/50 text-red-400 cursor-pointer text-sm">
+            Reset everything
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div class="max-w-screen-2xl mx-auto px-6 py-8">
+        <div id="welcomeBanner" class="hidden mb-8 bg-gradient-to-r from-zinc-900 to-zinc-800 border border-cyan-400/30 rounded-3xl p-6 flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-semibold">Welcome to your personal Grok dashboard</h1>
+                <p class="text-zinc-400 mt-1">Every card learns what you care about. Refresh to see it evolve.</p>
+            </div>
+            <button onclick="showCustomizeModal()" 
+                    class="px-6 py-3 bg-cyan-400 hover:bg-cyan-300 text-black font-semibold rounded-2xl flex items-center gap-x-2">
+                <i data-lucide="plus" class="w-5 h-5"></i>
+                Add your first card
+            </button>
+        </div>
+
+        <div id="cardsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+            <!-- Populated by JavaScript -->
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div onclick="if(event.target.id === 'settingsModal')hideModals()" 
+         id="settingsModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[200]">
+        <div onclick="event.stopImmediatePropagation()" 
+             class="modal-content bg-zinc-900 rounded-3xl w-full max-w-md mx-4 p-8">
+            <h2 class="text-2xl font-semibold mb-6 flex items-center gap-x-2">
+                <i data-lucide="key" class="w-6 h-6 text-cyan-400"></i>
+                xAI Grok API Settings
+            </h2>
+            
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-zinc-400 mb-2">API Key</label>
+                    <input id="apiKeyInput" type="password" 
+                           class="w-full bg-zinc-800 border border-zinc-700 focus:border-cyan-400 rounded-2xl px-4 py-3 outline-none"
+                           placeholder="xai-...">
+                    <p class="text-xs text-zinc-400 mt-2">Your key is stored only in your browser (localStorage). Get it at <a href="https://console.x.ai" target="_blank" class="underline">console.x.ai</a></p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-zinc-400 mb-2">Model</label>
+                    <select id="modelSelect" class="w-full bg-zinc-800 border border-zinc-700 focus:border-cyan-400 rounded-2xl px-4 py-3 outline-none">
+                        <option value="grok-4">grok-4 (recommended)</option>
+                        <option value="grok-beta">grok-beta</option>
+                    </select>
+                </div>
+
+                <div class="flex gap-3">
+                    <button onclick="saveSettings();hideModals()" 
+                            class="flex-1 bg-cyan-400 hover:bg-cyan-300 text-black font-semibold py-4 rounded-2xl">Save &amp; Close</button>
+                    <button onclick="hideModals()" 
+                            class="flex-1 border border-zinc-700 hover:bg-zinc-800 font-medium py-4 rounded-2xl">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CUSTOMIZE MODAL -->
+    <div onclick="if(event.target.id === 'customizeModal')hideModals()" 
+         id="customizeModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[200]">
+        <div onclick="event.stopImmediatePropagation()" 
+             class="modal-content bg-zinc-900 rounded-3xl w-full max-w-2xl mx-4 overflow-hidden flex flex-col max-h-[90vh]">
+            
+            <div class="px-8 pt-8 pb-4 border-b border-zinc-700 flex items-center justify-between">
+                <h2 class="text-2xl font-semibold">Manage Your Cards</h2>
+                <button onclick="addNewCard()" class="flex items-center gap-x-2 bg-cyan-400 hover:bg-cyan-300 text-black px-5 py-2 rounded-2xl text-sm font-medium">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    New Card
+                </button>
+            </div>
+
+            <div id="customizeList" class="flex-1 overflow-auto p-8 space-y-4">
+                <!-- Populated by JS -->
+            </div>
+
+            <div class="p-6 border-t border-zinc-700 flex justify-end gap-3">
+                <button onclick="hideModals()" class="px-8 py-3 border border-zinc-700 rounded-2xl">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHAT MODAL (per card) -->
+    <div onclick="if(event.target.id === 'chatModal')hideModals()" 
+         id="chatModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[200]">
+        <div onclick="event.stopImmediatePropagation()" 
+             class="modal-content bg-zinc-900 w-full max-w-4xl mx-4 h-[92vh] flex flex-col rounded-3xl overflow-hidden">
+            
+            <div class="px-6 py-5 border-b border-zinc-700 flex items-center justify-between bg-zinc-950">
+                <div class="flex items-center gap-x-4">
+                    <div id="chatCardTitle" class="font-semibold text-xl"></div>
+                    <div id="chatTopicBadge" class="text-xs font-medium bg-zinc-800 px-3 py-1 rounded-3xl text-cyan-300"></div>
+                </div>
+                <div class="flex items-center gap-x-4">
+                    <button onclick="refreshCurrentChatCard()" 
+                            class="flex items-center gap-x-1 text-sm hover:text-cyan-400">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                        <span>Smart Refresh</span>
+                    </button>
+                    <button onclick="hideModals()" class="text-zinc-400 hover:text-white">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Learned summary banner -->
+            <div id="learnedBanner" onclick="showSummaryDetail()" 
+                 class="hidden mx-6 mt-4 bg-zinc-800 border border-cyan-300/30 rounded-2xl px-5 py-3 text-sm flex items-center cursor-pointer">
+                <i data-lucide="sparkles" class="w-4 h-4 text-cyan-400 mr-2"></i>
+                <span id="learnedText" class="flex-1 line-clamp-1"></span>
+                <span class="text-xs uppercase tracking-widest bg-cyan-400 text-black px-3 py-0.5 rounded-3xl">Learned interests</span>
+            </div>
+
+            <!-- Chat messages -->
+            <div id="chatMessages" class="flex-1 overflow-auto p-6 space-y-8 bg-[radial-gradient(#27272a_1px,transparent_1px)] bg-[length:40px_40px]">
+                <!-- Populated by JS -->
+            </div>
+
+            <!-- Input area -->
+            <div class="p-6 border-t border-zinc-700 bg-zinc-950">
+                <div class="flex gap-x-3">
+                    <input id="chatInput" 
+                           onkeydown="if(event.key==='Enter')sendFollowUpMessage()"
+                           class="flex-1 bg-zinc-800 border border-zinc-700 focus:border-cyan-400 rounded-3xl px-6 py-4 outline-none text-lg"
+                           placeholder="Ask a follow-up question…">
+                    <button onclick="sendFollowUpMessage()" 
+                            class="w-12 h-12 bg-cyan-400 hover:bg-cyan-300 text-black rounded-3xl flex items-center justify-center">
+                        <i data-lucide="send" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="text-[10px] text-zinc-500 mt-3 text-center">All conversations are saved in your browser • Powered by Grok</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ====================== CONFIG & DATA ======================
+        let cards = []
+        let conversations = {}
+        let settings = { apiKey: '', model: 'grok-4' }
+        let currentChatCardId = null
+
+        const STORAGE_CARDS = 'grok-cards-v2'
+        const STORAGE_CONVERSATIONS = 'grok-conversations-v2'
+        const STORAGE_SETTINGS = 'grok-settings-v2'
+
+        // ====================== STORAGE ======================
+        function loadData() {
+            const savedCards = localStorage.getItem(STORAGE_CARDS)
+            if (savedCards) cards = JSON.parse(savedCards)
+
+            const savedConv = localStorage.getItem(STORAGE_CONVERSATIONS)
+            if (savedConv) conversations = JSON.parse(savedConv)
+
+            const savedSettings = localStorage.getItem(STORAGE_SETTINGS)
+            if (savedSettings) settings = JSON.parse(savedSettings)
+
+            // First-time demo cards
+            if (cards.length === 0) {
+                cards = [
+                    {
+                        id: 'demo-1',
+                        title: 'AI & Research',
+                        topic: 'Artificial Intelligence',
+                        initialQuestion: 'What are the most exciting recent breakthroughs in AI research that a curious hobbyist should know about?',
+                        contextSummary: '',
+                        lastUpdated: Date.now() - 86400000 * 3
+                    },
+                    {
+                        id: 'demo-2',
+                        title: 'European Politics',
+                        topic: 'Politics • Europe',
+                        initialQuestion: 'Give me a concise overview of the current political situation in the EU, focusing on policy areas that will matter in the next 12 months.',
+                        contextSummary: '',
+                        lastUpdated: Date.now() - 86400000 * 2
+                    },
+                    {
+                        id: 'demo-3',
+                        title: 'Climate Tech',
+                        topic: 'Climate & Energy',
+                        initialQuestion: 'What are the most promising climate-tech startups and technologies that could realistically scale in the next decade?',
+                        contextSummary: '',
+                        lastUpdated: Date.now() - 86400000
+                    }
+                ]
+                saveData()
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem(STORAGE_CARDS, JSON.stringify(cards))
+            localStorage.setItem(STORAGE_CONVERSATIONS, JSON.stringify(conversations))
+            localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(settings))
+        }
+
+        // ====================== TAILWIND + ICONS ======================
+        function initializeTailwind() {
+            return {
+                config(userConfig = {}) {
+                    return {
+                        configUser: userConfig,
+                        theme: { extend: {} },
+                    }
+                },
+                theme: { extend: {} },
+            }
+        }
+
+        // ====================== GROK API ======================
+        async function callGrok(messages) {
+            if (!settings.apiKey) {
+                alert('⚠️ Please enter your xAI API key in Settings first!')
+                openSettings()
+                return null
+            }
+
+            const res = await fetch('https://api.x.ai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${settings.apiKey}`
+                },
+                body: JSON.stringify({
+                    model: settings.model,
+                    messages: messages,
+                    temperature: 0.7,
+                    max_tokens: 4096
+                })
+            })
+
+            if (!res.ok) {
+                const txt = await res.text()
+                throw new Error(`API error ${res.status}: ${txt}`)
+            }
+
+            const data = await res.json()
+            return data.choices[0].message.content.trim()
+        }
+
+        // ====================== COMPRESSION (the smart part) ======================
+        async function compressConversation(cardId) {
+            const conv = conversations[cardId] || []
+            if (conv.length < 4) return ''
+
+            const card = cards.find(c => c.id === cardId)
+            if (!card) return ''
+
+            const history = conv.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')
+
+            const systemPrompt = `You are a context compressor for a personal topic dashboard.
+Summarize the ENTIRE conversation below into ONE concise paragraph (maximum 140 words).
+Focus ESPECIALLY on:
+• The user's expressed interests, preferences, and what they want to see more of
+• Specific angles, depth levels, or style they prefer
+• Anything they explicitly asked to ignore or emphasize
+
+Output ONLY the summary. No explanations, no intro text, no bullet points.
+
+Topic: ${card.topic}
+Original question: ${card.initialQuestion}`
+
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: history }
+            ]
+
+            try {
+                return await callGrok(messages)
+            } catch (e) {
+                console.error('Compression failed', e)
+                return card.contextSummary || ''
+            }
+        }
+
+        // ====================== REFRESH LOGIC ======================
+        async function refreshCardContent(cardId, isFromChat = false) {
+            const cardIndex = cards.findIndex(c => c.id === cardId)
+            if (cardIndex === -1) return
+
+            const card = cards[cardIndex]
+            const conv = conversations[cardId] || []
+
+            let summary = card.contextSummary || ''
+
+            // Show loading
+            const cardEl = document.getElementById(`card-${cardId}`)
+            if (cardEl) cardEl.style.opacity = '0.6'
+
+            // Compress if we have meaningful history
+            if (conv.length > 3) {
+                summary = await compressConversation(cardId)
+                card.contextSummary = summary
+                card.lastRefreshUsedSummary = true
+            }
+
+            // Build fresh personalized query
+            const systemMessage = `You are a world-class expert on ${card.topic}.
+Use the following user context to personalize your answer as much as possible:
+${summary || 'No prior context yet.'}
+
+Stay factual, up-to-date, and insightful.`
+
+            const userMessage = `${card.initialQuestion}
+Take into account everything I have expressed interest in during previous conversations with this card.`
+
+            const messages = [
+                { role: 'system', content: systemMessage },
+                { role: 'user', content: userMessage }
+            ]
+
+            try {
+                const newContent = await callGrok(messages)
+
+                // Store the new content as the latest answer and also append to conversation
+                card.lastUpdated = Date.now()
+
+                if (!conversations[cardId]) conversations[cardId] = []
+                conversations[cardId].push(
+                    { role: 'user', content: '[Smart Refresh] ' + card.initialQuestion },
+                    { role: 'assistant', content: newContent }
+                )
+
+                saveData()
+                renderCards()
+
+                // If the chat modal is open for this card, refresh it
+                if (currentChatCardId === cardId) renderChat()
+
+                if (!isFromChat) {
+                    alert(`✅ Card “${card.title}” refreshed with your learned interests!`)
+                }
+            } catch (err) {
+                alert('Refresh failed: ' + err.message)
+            } finally {
+                if (cardEl) cardEl.style.opacity = '1'
+            }
+        }
+
+        async function refreshAllCards() {
+            for (const card of cards) {
+                await refreshCardContent(card.id)
+                // tiny pause for UX
+                await new Promise(r => setTimeout(r, 300))
+            }
+        }
+
+        // ====================== CHAT MODAL ======================
+        function openChat(cardId) {
+            currentChatCardId = cardId
+            const card = cards.find(c => c.id === cardId)
+            document.getElementById('chatCardTitle').textContent = card.title
+            document.getElementById('chatTopicBadge').innerHTML = `<span class="px-3 py-px bg-cyan-400 text-black text-xs rounded-3xl">${card.topic}</span>`
+
+            // Show learned banner if we have a summary
+            const banner = document.getElementById('learnedBanner')
+            const text = document.getElementById('learnedText')
+            if (card.contextSummary) {
+                banner.classList.remove('hidden')
+                text.textContent = card.contextSummary.length > 110 
+                    ? card.contextSummary.substring(0, 107) + '…' 
+                    : card.contextSummary
+            } else {
+                banner.classList.add('hidden')
+            }
+
+            document.getElementById('chatModal').classList.remove('hidden')
+            document.getElementById('chatModal').classList.add('flex')
+            renderChat()
+            document.getElementById('chatInput').focus()
+        }
+
+        function renderChat() {
+            const container = document.getElementById('chatMessages')
+            container.innerHTML = ''
+
+            const conv = conversations[currentChatCardId] || []
+
+            conv.forEach(msg => {
+                const div = document.createElement('div')
+                div.className = msg.role === 'user' 
+                    ? 'flex justify-end' 
+                    : 'flex justify-start'
+
+                const bubble = document.createElement('div')
+                bubble.className = msg.role === 'user' 
+                    ? 'chat-bubble-user max-w-[75%] px-6 py-4 rounded-3xl rounded-br-none text-black' 
+                    : 'bg-zinc-800 max-w-[75%] px-6 py-4 rounded-3xl rounded-bl-none'
+
+                if (msg.role === 'assistant') {
+                    bubble.innerHTML = marked.parse(msg.content)
+                } else {
+                    bubble.textContent = msg.content
+                }
+                div.appendChild(bubble)
+                container.appendChild(div)
+            })
+
+            // Scroll to bottom
+            container.scrollTop = container.scrollHeight
+        }
+
+        async function sendFollowUpMessage() {
+            const input = document.getElementById('chatInput')
+            const text = input.value.trim()
+            if (!text || !currentChatCardId) return
+
+            // Add user message
+            if (!conversations[currentChatCardId]) conversations[currentChatCardId] = []
+            conversations[currentChatCardId].push({ role: 'user', content: text })
+
+            // Clear input
+            input.value = ''
+
+            // Render immediately
+            renderChat()
+
+            // Call Grok with full history
+            const card = cards.find(c => c.id === currentChatCardId)
+            const history = conversations[currentChatCardId]
+
+            const messages = [
+                { role: 'system', content: `You are an expert on ${card.topic}. Keep the conversation going naturally.` },
+                ...history
+            ]
+
+            try {
+                const reply = await callGrok(messages)
+                conversations[currentChatCardId].push({ role: 'assistant', content: reply })
+                saveData()
+                renderChat()
+            } catch (e) {
+                console.error(e)
+                // Still save the user message even on error
+            }
+        }
+
+        function refreshCurrentChatCard() {
+            hideModals()
+            setTimeout(() => {
+                refreshCardContent(currentChatCardId, true)
+                openChat(currentChatCardId)
+            }, 400)
+        }
+
+        function showSummaryDetail() {
+            const card = cards.find(c => c.id === currentChatCardId)
+            if (!card || !card.contextSummary) return
+            alert('Learned context for this card:\n\n' + card.contextSummary)
+        }
+
+        // ====================== CARD RENDERING ======================
+        function renderCards() {
+            const grid = document.getElementById('cardsGrid')
+            grid.innerHTML = ''
+
+            if (cards.length === 0) {
+                document.getElementById('welcomeBanner').classList.remove('hidden')
+                return
+            } else {
+                document.getElementById('welcomeBanner').classList.add('hidden')
+            }
+
+            cards.forEach(card => {
+                const conv = conversations[card.id] || []
+                const latestAnswer = conv.length ? conv[conv.length - 1].content : 'Tap to load content…'
+
+                const previewHTML = marked.parse(latestAnswer).substring(0, 280) + (latestAnswer.length > 280 ? '…' : '')
+
+                const el = document.createElement('div')
+                el.id = `card-${card.id}`
+                el.className = `card-hover bg-zinc-900 border border-zinc-800 rounded-3xl p-6 cursor-pointer flex flex-col h-full`
+                el.innerHTML = `
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <div class="flex items-center gap-x-2">
+                                <span class="font-semibold text-xl">${card.title}</span>
+                            </div>
+                            <span class="inline-block text-xs bg-zinc-800 text-cyan-300 px-3 py-1 mt-1 rounded-3xl">${card.topic}</span>
+                        </div>
+                        <div class="flex items-center gap-x-2">
+                            ${card.contextSummary ? `<span onclick="event.stopImmediatePropagation();showContextSummary('${card.id}');" class="text-[10px] flex items-center bg-emerald-300 text-emerald-950 px-2 py-px rounded-3xl cursor-pointer"><i data-lucide="sparkles" class="w-3 h-3 mr-px"></i>learned</span>` : ''}
+                            <button onclick="event.stopImmediatePropagation();refreshCardContent('${card.id}');" class="text-zinc-400 hover:text-cyan-400">
+                                <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 prose prose-invert text-sm line-clamp-6 mb-6" style="max-height: 210px;">
+                        ${previewHTML}
+                    </div>
+
+                    <div class="text-xs text-zinc-500 flex justify-between items-center">
+                        <span>Last refreshed ${timeAgo(card.lastUpdated)}</span>
+                        <span class="flex items-center text-cyan-300 text-[10px]">${conv.length} messages</span>
+                    </div>
+                `
+                el.onclick = () => openChat(card.id)
+                grid.appendChild(el)
+            })
+
+            lucide.createIcons()
+        }
+
+        function timeAgo(ts) {
+            const diff = Date.now() - ts
+            const minutes = Math.floor(diff / 60000)
+            if (minutes < 1) return 'just now'
+            if (minutes < 60) return `${minutes}m ago`
+            const hours = Math.floor(minutes / 60)
+            if (hours < 24) return `${hours}h ago`
+            return `${Math.floor(hours / 24)}d ago`
+        }
+
+        function showContextSummary(id) {
+            const card = cards.find(c => c.id === id)
+            if (card && card.contextSummary) {
+                alert('Current learned context for this card:\n\n' + card.contextSummary)
+            }
+        }
+
+        // ====================== CUSTOMIZE ======================
+        function showCustomizeModal() {
+            hideModals()
+            const modal = document.getElementById('customizeModal')
+            modal.classList.remove('hidden')
+            modal.classList.add('flex')
+
+            const container = document.getElementById('customizeList')
+            container.innerHTML = ''
+
+            cards.forEach((card, i) => {
+                const row = document.createElement('div')
+                row.className = 'flex items-center justify-between bg-zinc-800 rounded-2xl px-5 py-4'
+                row.innerHTML = `
+                    <div class="flex-1">
+                        <div class="font-medium">${card.title}</div>
+                        <div class="text-xs text-zinc-400">${card.topic} • ${card.initialQuestion.substring(0, 60)}…</div>
+                    </div>
+                    <div class="flex gap-x-2">
+                        <button onclick="editCard(${i});event.stopImmediatePropagation()" class="px-4 py-2 text-xs border border-zinc-600 rounded-2xl hover:bg-zinc-700">Edit</button>
+                        <button onclick="deleteCard(${i});event.stopImmediatePropagation()" class="px-4 py-2 text-xs text-red-400 border border-red-400/30 rounded-2xl hover:bg-red-950/40">Delete</button>
+                    </div>
+                `
+                container.appendChild(row)
+            })
+
+            if (cards.length === 0) {
+                container.innerHTML = `<p class="text-zinc-400 text-center py-12">No cards yet. Add one above!</p>`
+            }
+        }
+
+        function addNewCard() {
+            const title = prompt('Card title (e.g. Quantum Computing)', 'New Topic')
+            if (!title) return
+            const topic = prompt('Topic / category', 'Technology')
+            const question = prompt('Initial question to ask Grok', 'What should I know about this topic right now?')
+            if (!question) return
+
+            const newCard = {
+                id: 'card-' + crypto.randomUUID().slice(0, 8),
+                title: title,
+                topic: topic,
+                initialQuestion: question,
+                contextSummary: '',
+                lastUpdated: Date.now()
+            }
+
+            cards.push(newCard)
+            saveData()
+            renderCards()
+            showCustomizeModal() // refresh list
+        }
+
+        function editCard(index) {
+            const card = cards[index]
+            const title = prompt('Edit title', card.title)
+            if (title) card.title = title
+            const topic = prompt('Edit topic', card.topic)
+            if (topic) card.topic = topic
+            const q = prompt('Edit initial question', card.initialQuestion)
+            if (q) card.initialQuestion = q
+
+            saveData()
+            renderCards()
+            showCustomizeModal()
+        }
+
+        function deleteCard(index) {
+            if (!confirm('Delete this card and its entire conversation history?')) return
+            const id = cards[index].id
+            delete conversations[id]
+            cards.splice(index, 1)
+            saveData()
+            renderCards()
+            showCustomizeModal()
+        }
+
+        // ====================== SETTINGS ======================
+        function openSettings() {
+            hideModals()
+            const modal = document.getElementById('settingsModal')
+            modal.classList.remove('hidden')
+            modal.classList.add('flex')
+
+            document.getElementById('apiKeyInput').value = settings.apiKey || ''
+            document.getElementById('modelSelect').value = settings.model
+        }
+
+        function saveSettings() {
+            settings.apiKey = document.getElementById('apiKeyInput').value.trim()
+            settings.model = document.getElementById('modelSelect').value
+            saveData()
+            alert('✅ Settings saved. Your key is stored only in this browser.')
+        }
+
+        // ====================== UTILITIES ======================
+        function toggleMenu() {
+            const menu = document.getElementById('menuDropdown')
+            menu.classList.toggle('hidden')
+        }
+
+        function hideModals() {
+            document.querySelectorAll('.fixed.inset-0').forEach(modal => {
+                modal.classList.add('hidden')
+                modal.classList.remove('flex')
+            })
+            currentChatCardId = null
+        }
+
+        function exportData() {
+            const data = {
+                cards: cards,
+                conversations: conversations,
+                settings: settings,
+                exportedAt: new Date().toISOString()
+            }
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = 'grok-cards-backup.json'
+            a.click()
+            hideModals()
+        }
+
+        function importData() {
+            const input = document.createElement('input')
+            input.type = 'file'
+            input.accept = '.json'
+            input.onchange = e => {
+                const file = e.target.files[0]
+                const reader = new FileReader()
+                reader.onload = ev => {
+                    try {
+                        const imported = JSON.parse(ev.target.result)
+                        if (imported.cards) cards = imported.cards
+                        if (imported.conversations) conversations = imported.conversations
+                        if (imported.settings) settings = imported.settings
+                        saveData()
+                        renderCards()
+                        alert('✅ Import successful!')
+                    } catch (err) {
+                        alert('Import failed – invalid file')
+                    }
+                }
+                reader.readAsText(file)
+            }
+            input.click()
+            hideModals()
+        }
+
+        function resetAllData() {
+            if (!confirm('Delete ALL cards, conversations and settings? This cannot be undone.')) return
+            localStorage.removeItem(STORAGE_CARDS)
+            localStorage.removeItem(STORAGE_CONVERSATIONS)
+            localStorage.removeItem(STORAGE_SETTINGS)
+            cards = []
+            conversations = {}
+            settings = { apiKey: '', model: 'grok-4' }
+            renderCards()
+            hideModals()
+        }
+
+        // ====================== BOOTSTRAP ======================
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeTailwind().config({ theme: { extend: {} } })
+            loadData()
+            renderCards()
+            lucide.createIcons()
+
+            console.log('%c🚀 Grok Topic Cards v2 ready – smart refresh & conversation compression enabled!', 'color:#00f0ff; font-family:monospace')
+        })
+    </script>
+</body>
+</html>
