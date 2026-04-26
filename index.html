@@ -240,6 +240,31 @@
         const STORAGE_CONVERSATIONS = 'grok-conversations-v2'
         const STORAGE_SETTINGS = 'grok-settings-v2'
 
+        /** Drop invalid turns (e.g. content: null) so API history and UI stay consistent. */
+        function sanitizeConversations() {
+            if (!conversations || typeof conversations !== 'object') {
+                conversations = {}
+                return false
+            }
+            let changed = false
+            for (const id of Object.keys(conversations)) {
+                const arr = conversations[id]
+                if (!Array.isArray(arr)) {
+                    delete conversations[id]
+                    changed = true
+                    continue
+                }
+                const filtered = arr.filter(
+                    m => m && typeof m === 'object' && m.content != null
+                )
+                if (filtered.length !== arr.length) {
+                    conversations[id] = filtered
+                    changed = true
+                }
+            }
+            return changed
+        }
+
         // ====================== STORAGE ======================
         function loadData() {
             const savedCards = localStorage.getItem(STORAGE_CARDS)
@@ -250,6 +275,8 @@
 
             const savedSettings = localStorage.getItem(STORAGE_SETTINGS)
             if (savedSettings) settings = JSON.parse(savedSettings)
+
+            if (sanitizeConversations()) saveData()
 
             // First-time demo cards
             if (cards.length === 0) {
@@ -765,6 +792,7 @@ Take into account everything I have expressed interest in during previous conver
                         if (imported.cards) cards = imported.cards
                         if (imported.conversations) conversations = imported.conversations
                         if (imported.settings) settings = imported.settings
+                        sanitizeConversations()
                         saveData()
                         renderCards()
                         alert('✅ Import successful!')
