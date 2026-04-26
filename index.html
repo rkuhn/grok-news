@@ -139,11 +139,17 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-zinc-400 mb-2">Model</label>
-                    <select id="modelSelect" class="w-full bg-zinc-800 border border-zinc-700 focus:border-cyan-400 rounded-2xl px-4 py-3 outline-none">
-                        <option value="grok-4">grok-4 (recommended)</option>
-                        <option value="grok-beta">grok-beta</option>
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <label class="block text-sm font-medium text-zinc-400">Model</label>
+                        <button type="button" onclick="populateModelSelectFromApi()" id="modelListReloadBtn"
+                                class="text-xs text-cyan-400 hover:text-cyan-300 font-medium">
+                            Reload list
+                        </button>
+                    </div>
+                    <select id="modelSelect" disabled
+                            class="w-full bg-zinc-800 border border-zinc-700 focus:border-cyan-400 rounded-2xl px-4 py-3 outline-none disabled:opacity-60">
                     </select>
+                    <p id="modelSelectStatus" class="text-xs mt-2 text-zinc-500 min-h-[2.5rem]"></p>
                 </div>
 
                 <div class="flex gap-3">
@@ -336,6 +342,102 @@
         }
 
         // ====================== GROK API ======================
+        const XAI_MODELS_URL = 'https://api.x.ai/v1/models'
+        const MODEL_FALLBACK_IDS = ['grok-4', 'grok-beta']
+
+        async function fetchXaiModelIds(apiKey) {
+            const res = await fetch(XAI_MODELS_URL, {
+                headers: { 'Authorization': `Bearer ${apiKey}` }
+            })
+            const txt = await res.text()
+            if (!res.ok) {
+                throw new Error(`Models API ${res.status}: ${txt.slice(0, 200)}${txt.length > 200 ? '…' : ''}`)
+            }
+            let json
+            try {
+                json = JSON.parse(txt)
+            } catch {
+                throw new Error('Models API returned invalid JSON.')
+            }
+            const items = json.data
+            if (!Array.isArray(items)) {
+                throw new Error('Models API response missing data array.')
+            }
+            const ids = items.map(m => m && m.id).filter(Boolean)
+            return [...new Set(ids)].sort((a, b) => a.localeCompare(b))
+        }
+
+        function fillModelSelectFallback() {
+            const select = document.getElementById('modelSelect')
+            const saved = settings.model || MODEL_FALLBACK_IDS[0]
+            select.innerHTML = ''
+            const ids = [...MODEL_FALLBACK_IDS]
+            if (saved && !ids.includes(saved)) ids.push(saved)
+            for (const id of ids) {
+                const opt = document.createElement('option')
+                opt.value = id
+                opt.textContent = !MODEL_FALLBACK_IDS.includes(id) ? `${id} (saved)` : id
+                select.appendChild(opt)
+            }
+            select.value = [...select.options].some(o => o.value === saved) ? saved : MODEL_FALLBACK_IDS[0]
+        }
+
+        async function populateModelSelectFromApi() {
+            const select = document.getElementById('modelSelect')
+            const status = document.getElementById('modelSelectStatus')
+            const keyInput = document.getElementById('apiKeyInput')
+            const key = (keyInput && keyInput.value.trim()) || settings.apiKey || ''
+
+            const setStatus = (msg, kind) => {
+                if (!status) return
+                status.textContent = msg
+                if (kind === 'error') status.className = 'text-xs mt-2 text-red-400 min-h-[2.5rem]'
+                else if (kind === 'ok') status.className = 'text-xs mt-2 text-emerald-400/90 min-h-[2.5rem]'
+                else status.className = 'text-xs mt-2 text-zinc-500 min-h-[2.5rem]'
+            }
+
+            if (!key) {
+                select.disabled = false
+                fillModelSelectFallback()
+                setStatus('Enter your API key and click “Reload list” to load models your key can access.', 'muted')
+                return
+            }
+
+            const reloadBtn = document.getElementById('modelListReloadBtn')
+            select.disabled = true
+            if (reloadBtn) reloadBtn.disabled = true
+            setStatus('Loading models from xAI…', 'muted')
+
+            try {
+                const ids = await fetchXaiModelIds(key)
+                if (ids.length === 0) {
+                    select.disabled = false
+                    if (reloadBtn) reloadBtn.disabled = false
+                    fillModelSelectFallback('')
+                    setStatus('No models were returned for this key. Using fallback list — pick a model ID you know is enabled.', 'error')
+                    return
+                }
+                select.innerHTML = ''
+                const preferred = settings.model
+                for (const id of ids) {
+                    const opt = document.createElement('option')
+                    opt.value = id
+                    opt.textContent = id
+                    select.appendChild(opt)
+                }
+                if (preferred && ids.includes(preferred)) select.value = preferred
+                else select.value = ids[0]
+                select.disabled = false
+                if (reloadBtn) reloadBtn.disabled = false
+                setStatus(`${ids.length} models available for this key.`, 'ok')
+            } catch (e) {
+                select.disabled = false
+                if (reloadBtn) reloadBtn.disabled = false
+                fillModelSelectFallback('')
+                setStatus(e.message || 'Could not load models. Using fallback list.', 'error')
+            }
+        }
+
         async function callGrok(messages) {
             if (!settings.apiKey) {
                 alert('⚠️ Please enter your xAI API key in Settings first!')
@@ -819,7 +921,8 @@ Take into account everything I have expressed interest in during previous conver
             modal.classList.add('flex')
 
             document.getElementById('apiKeyInput').value = settings.apiKey || ''
-            document.getElementById('modelSelect').value = settings.model
+            void populateModelSelectFromApi()
+            if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons()
         }
 
         function saveSettings() {
