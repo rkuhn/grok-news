@@ -98,6 +98,12 @@
         <div onclick="exportData()" class="flex items-center gap-x-3 px-6 py-3 hover:bg-zinc-800 cursor-pointer text-sm">
             Export all data
         </div>
+        <div onclick="exportCardsAndLearnedContext()" class="flex items-center gap-x-3 px-6 py-3 hover:bg-zinc-800 cursor-pointer text-sm">
+            <div>
+                <div class="font-medium">Export cards &amp; learned context</div>
+                <div class="text-xs text-zinc-400">Card setup and summaries only — no chat history or settings</div>
+            </div>
+        </div>
         <div onclick="importData()" class="flex items-center gap-x-3 px-6 py-3 hover:bg-zinc-800 cursor-pointer text-sm">
             Import data
         </div>
@@ -1327,19 +1333,74 @@ Take into account everything I have expressed interest in during previous conver
 
         function exportData() {
             closeMenu()
-            const data = {
-                cards: cards,
-                conversations: conversations,
-                settings: settings,
-                exportedAt: new Date().toISOString()
+            let payload
+            try {
+                const rawCards = localStorage.getItem(STORAGE_CARDS)
+                const rawConv = localStorage.getItem(STORAGE_CONVERSATIONS)
+                const rawSettings = localStorage.getItem(STORAGE_SETTINGS)
+                payload = {
+                    cards: rawCards ? JSON.parse(rawCards) : [],
+                    conversations: rawConv ? JSON.parse(rawConv) : {},
+                    settings: rawSettings
+                        ? JSON.parse(rawSettings)
+                        : { apiKey: '', model: 'grok-4', multiAgentReasoningEffort: 'medium' },
+                    exportedAt: new Date().toISOString()
+                }
+            } catch (err) {
+                console.error(err)
+                showToast('Export failed — localStorage data could not be read.', 'error')
+                hideModals()
+                return
             }
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
             const url = URL.createObjectURL(blob)
             const a = document.createElement('a')
             a.href = url
             a.download = 'grok-cards-backup.json'
             a.click()
+            URL.revokeObjectURL(url)
             hideModals()
+            showToast('Backup downloaded (from localStorage).', 'success')
+        }
+
+        function exportCardsAndLearnedContext() {
+            closeMenu()
+            let payload
+            try {
+                const rawCards = localStorage.getItem(STORAGE_CARDS)
+                const cards = rawCards ? JSON.parse(rawCards) : []
+                payload = {
+                    exportKind: 'grok-cards-learned-context-v1',
+                    cards,
+                    exportedAt: new Date().toISOString()
+                }
+            } catch (err) {
+                console.error(err)
+                showToast('Export failed — could not read cards from localStorage.', 'error')
+                hideModals()
+                return
+            }
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = 'grok-cards-and-context.json'
+            a.click()
+            URL.revokeObjectURL(url)
+            hideModals()
+            showToast('Cards and learned context downloaded.', 'success')
+        }
+
+        /** Slim export (or hand-made file) has no conversations/settings keys; full backup includes them. */
+        function isCardsOnlyImport(imported) {
+            if (!imported || typeof imported !== 'object') return false
+            if (imported.exportKind === 'grok-cards-learned-context-v1') return true
+            if (!Object.prototype.hasOwnProperty.call(imported, 'cards') || !Array.isArray(imported.cards)) {
+                return false
+            }
+            const hasConv = Object.prototype.hasOwnProperty.call(imported, 'conversations')
+            const hasSettings = Object.prototype.hasOwnProperty.call(imported, 'settings')
+            return !hasConv && !hasSettings
         }
 
         function importData() {
@@ -1353,16 +1414,47 @@ Take into account everything I have expressed interest in during previous conver
                 reader.onload = ev => {
                     try {
                         const imported = JSON.parse(ev.target.result)
-                        if (imported.cards) cards = imported.cards
-                        if (imported.conversations) conversations = imported.conversations
-                        if (imported.settings) settings = imported.settings
+                        const cardsOnly = isCardsOnlyImport(imported)
+
+                        if (imported.cards !== undefined && imported.cards !== null) {
+                            if (!Array.isArray(imported.cards)) {
+                                showToast('Import failed — “cards” must be an array.', 'error')
+                                return
+                            }
+                            cards = imported.cards
+                        }
+
+                        if (cardsOnly) {
+                            conversations = {}
+                        } else {
+                            if (imported.conversations !== undefined && imported.conversations !== null) {
+                                if (typeof imported.conversations !== 'object' || Array.isArray(imported.conversations)) {
+                                    showToast('Import failed — invalid conversations object.', 'error')
+                                    return
+                                }
+                                conversations = imported.conversations
+                            }
+                            if (imported.settings !== undefined && imported.settings !== null) {
+                                if (typeof imported.settings !== 'object' || Array.isArray(imported.settings)) {
+                                    showToast('Import failed — invalid settings object.', 'error')
+                                    return
+                                }
+                                settings = imported.settings
+                            }
+                        }
+
                         if (!['low', 'medium', 'high', 'xhigh'].includes(settings.multiAgentReasoningEffort)) {
                             settings.multiAgentReasoningEffort = 'medium'
                         }
                         sanitizeConversations()
                         saveData()
                         renderCards()
-                        showToast('Import successful.', 'success')
+                        showToast(
+                            cardsOnly
+                                ? 'Imported cards and learned context. Chat history was cleared; settings unchanged.'
+                                : 'Import successful.',
+                            'success'
+                        )
                     } catch (err) {
                         showToast('Import failed — invalid or corrupted file.', 'error')
                     }
