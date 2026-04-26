@@ -152,10 +152,24 @@
                             Reload list
                         </button>
                     </div>
-                    <select id="modelSelect" disabled
+                    <select id="modelSelect" disabled onchange="syncMultiAgentSettingsUI()"
                             class="w-full bg-zinc-800 border border-zinc-700 focus:border-cyan-400 rounded-2xl px-4 py-3 outline-none disabled:opacity-60">
                     </select>
                     <p id="modelSelectStatus" class="text-xs mt-2 text-zinc-500 min-h-[2.5rem]"></p>
+                </div>
+
+                <div id="multiAgentSettings" class="hidden space-y-2 rounded-2xl border border-cyan-500/25 bg-cyan-950/20 px-4 py-4">
+                    <p class="text-sm font-medium text-cyan-200">Multi-agent mode</p>
+                    <p class="text-xs text-zinc-400 leading-relaxed">This model uses the xAI <strong class="font-medium text-zinc-300">Responses API</strong> (not Chat Completions). Web and X search tools are enabled for research-style answers.</p>
+                    <div>
+                        <label for="multiAgentEffortSelect" class="block text-xs font-medium text-zinc-400 mb-2">Research depth (agent count)</label>
+                        <select id="multiAgentEffortSelect" class="w-full bg-zinc-800 border border-zinc-700 focus:border-cyan-400 rounded-2xl px-4 py-3 outline-none text-sm">
+                            <option value="low">Quick — 4 agents (low effort)</option>
+                            <option value="medium">Balanced — 4 agents (medium effort)</option>
+                            <option value="high">Deep — 16 agents (high effort)</option>
+                            <option value="xhigh">Maximum — 16 agents (extra high)</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="flex gap-3">
@@ -297,7 +311,7 @@
         // ====================== CONFIG & DATA ======================
         let cards = []
         let conversations = {}
-        let settings = { apiKey: '', model: 'grok-4' }
+        let settings = { apiKey: '', model: 'grok-4', multiAgentReasoningEffort: 'medium' }
         let currentChatCardId = null
         let chatAwaitingGrok = false
         let chatErrorText = null
@@ -410,6 +424,9 @@
 
             const savedSettings = localStorage.getItem(STORAGE_SETTINGS)
             if (savedSettings) settings = JSON.parse(savedSettings)
+            if (!['low', 'medium', 'high', 'xhigh'].includes(settings.multiAgentReasoningEffort)) {
+                settings.multiAgentReasoningEffort = 'medium'
+            }
 
             if (sanitizeConversations()) saveData()
 
@@ -523,6 +540,7 @@
                 select.disabled = false
                 fillModelSelectFallback()
                 setStatus('Enter your API key and click “Reload list” to load models your key can access.', 'muted')
+                applyMultiAgentSettingsUiState()
                 return
             }
 
@@ -558,7 +576,106 @@
                 if (reloadBtn) reloadBtn.disabled = false
                 fillModelSelectFallback()
                 setStatus(e.message || 'Could not load models. Using fallback list.', 'error')
+            } finally {
+                applyMultiAgentSettingsUiState()
             }
+        }
+
+        const XAI_CHAT_COMPLETIONS_URL = 'https://api.x.ai/v1/chat/completions'
+        const XAI_RESPONSES_URL = 'https://api.x.ai/v1/responses'
+
+        function isMultiAgentModel(modelId) {
+            return typeof modelId === 'string' && /multi-agent/i.test(modelId)
+        }
+
+        function syncMultiAgentSettingsUI() {
+            const panel = document.getElementById('multiAgentSettings')
+            const sel = document.getElementById('modelSelect')
+            if (!panel) return
+            const mid = (sel && sel.value) || settings.model || ''
+            if (isMultiAgentModel(mid)) panel.classList.remove('hidden')
+            else panel.classList.add('hidden')
+        }
+
+        function applyMultiAgentSettingsUiState() {
+            const eff = document.getElementById('multiAgentEffortSelect')
+            if (eff) eff.value = settings.multiAgentReasoningEffort || 'medium'
+            syncMultiAgentSettingsUI()
+        }
+
+        function responsesInputFromChatMessages(messages) {
+            if (!Array.isArray(messages)) return []
+            return messages.map(m => {
+                const role = m.role
+                if (role !== 'system' && role !== 'user' && role !== 'assistant') return null
+                let content = m.content
+                if (content == null) content = ''
+                if (typeof content !== 'string') {
+                    try {
+                        content = JSON.stringify(content)
+                    } catch {
+                        content = String(content)
+                    }
+                }
+                return { role, content }
+            }).filter(Boolean)
+        }
+
+        function extractResponsesOutputText(data) {
+            if (!data || typeof data !== 'object') return ''
+            if (typeof data.output_text === 'string' && data.output_text.trim()) {
+                return data.output_text.trim()
+            }
+            const out = data.output
+            if (!Array.isArray(out)) return ''
+            const texts = []
+            for (const item of out) {
+                if (item.type === 'message' && item.role === 'assistant' && Array.isArray(item.content)) {
+                    for (const block of item.content) {
+                        if (block && block.type === 'output_text' && block.text) texts.push(block.text)
+                    }
+                }
+            }
+            return texts.join('\n\n').trim()
+        }
+
+        async function callXaiResponses(messages) {
+            const input = responsesInputFromChatMessages(messages)
+            if (input.length === 0) throw new Error('No valid messages for the Responses API.')
+
+            const effort = settings.multiAgentReasoningEffort || 'medium'
+            const body = {
+                model: settings.model,
+                input,
+                store: false,
+                tools: [
+                    { type: 'web_search' },
+                    { type: 'x_search' }
+                ],
+                reasoning: { effort }
+            }
+
+            const res = await fetch(XAI_RESPONSES_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${settings.apiKey}`
+                },
+                body: JSON.stringify(body)
+            })
+
+            const txt = await res.text()
+            if (!res.ok) {
+                throw new Error(`Responses API ${res.status}: ${txt.slice(0, 500)}${txt.length > 500 ? '…' : ''}`)
+            }
+            let data
+            try {
+                data = JSON.parse(txt)
+            } catch {
+                throw new Error('Responses API returned invalid JSON.')
+            }
+            const text = extractResponsesOutputText(data)
+            return text || ''
         }
 
         async function callGrok(messages) {
@@ -568,7 +685,11 @@
                 return null
             }
 
-            const res = await fetch('https://api.x.ai/v1/chat/completions', {
+            if (isMultiAgentModel(settings.model)) {
+                return callXaiResponses(messages)
+            }
+
+            const res = await fetch(XAI_CHAT_COMPLETIONS_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1110,6 +1231,8 @@ Take into account everything I have expressed interest in during previous conver
             modal.classList.add('flex')
 
             document.getElementById('apiKeyInput').value = settings.apiKey || ''
+            const eff = document.getElementById('multiAgentEffortSelect')
+            if (eff) eff.value = settings.multiAgentReasoningEffort || 'medium'
             void populateModelSelectFromApi()
             if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons()
         }
@@ -1117,6 +1240,8 @@ Take into account everything I have expressed interest in during previous conver
         function saveSettings() {
             settings.apiKey = document.getElementById('apiKeyInput').value.trim()
             settings.model = document.getElementById('modelSelect').value
+            const eff = document.getElementById('multiAgentEffortSelect')
+            if (eff) settings.multiAgentReasoningEffort = eff.value || 'medium'
             saveData()
             showToast('Settings saved. Your key stays only in this browser.', 'success')
         }
@@ -1189,6 +1314,9 @@ Take into account everything I have expressed interest in during previous conver
                         if (imported.cards) cards = imported.cards
                         if (imported.conversations) conversations = imported.conversations
                         if (imported.settings) settings = imported.settings
+                        if (!['low', 'medium', 'high', 'xhigh'].includes(settings.multiAgentReasoningEffort)) {
+                            settings.multiAgentReasoningEffort = 'medium'
+                        }
                         sanitizeConversations()
                         saveData()
                         renderCards()
@@ -1211,7 +1339,7 @@ Take into account everything I have expressed interest in during previous conver
                 localStorage.removeItem(STORAGE_SETTINGS)
                 cards = []
                 conversations = {}
-                settings = { apiKey: '', model: 'grok-4' }
+                settings = { apiKey: '', model: 'grok-4', multiAgentReasoningEffort: 'medium' }
                 renderCards()
                 hideModals()
                 showToast('All data was reset.', 'success')
