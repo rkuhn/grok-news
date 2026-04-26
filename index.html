@@ -44,11 +44,17 @@
         .grok-typing-dot { width: 7px; height: 7px; background: #71717a; border-radius: 9999px; animation: grok-typing-bounce 1s infinite ease-in-out; }
         .grok-typing-dot:nth-child(2) { animation-delay: 0.15s; }
         .grok-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+        .toast-enter { opacity: 0; transform: translateY(0.5rem); }
+        .toast-visible { opacity: 1; transform: translateY(0); }
+        .toast-leave { opacity: 0; transform: translateY(0.35rem); }
+        @keyframes grok-spin { to { transform: rotate(360deg); } }
+        @keyframes grok-compress-pulse { 50% { opacity: 0.55; } }
+        .grok-compress-spin { animation: grok-spin 0.75s linear infinite, grok-compress-pulse 1.15s ease-in-out infinite; }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 font-sans">
     <!-- Top Navigation -->
-    <nav class="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center sticky top-0 z-50">
+    <nav id="mainNav" class="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center sticky top-0 z-50">
         <div class="flex items-center gap-x-3 cursor-pointer" onclick="toggleMenu()">
             <div class="w-9 h-9 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-2xl flex items-center justify-center">
                 <i data-lucide="brain" class="w-5 h-5 text-white"></i>
@@ -170,7 +176,7 @@
             
             <div class="px-8 pt-8 pb-4 border-b border-zinc-700 flex items-center justify-between">
                 <h2 class="text-2xl font-semibold">Manage Your Cards</h2>
-                <button onclick="addNewCard()" class="flex items-center gap-x-2 bg-cyan-400 hover:bg-cyan-300 text-black px-5 py-2 rounded-2xl text-sm font-medium">
+                <button type="button" onclick="openNewCardForm()" class="flex items-center gap-x-2 bg-cyan-400 hover:bg-cyan-300 text-black px-5 py-2 rounded-2xl text-sm font-medium">
                     <i data-lucide="plus" class="w-4 h-4"></i>
                     New Card
                 </button>
@@ -209,12 +215,13 @@
                 </div>
             </div>
 
-            <!-- Learned summary banner -->
-            <div id="learnedBanner" onclick="showSummaryDetail()" 
-                 class="hidden mx-6 mt-4 bg-zinc-800 border border-cyan-300/30 rounded-2xl px-5 py-3 text-sm flex items-center cursor-pointer">
-                <i data-lucide="sparkles" class="w-4 h-4 text-cyan-400 mr-2"></i>
-                <span id="learnedText" class="flex-1 line-clamp-1"></span>
-                <span class="text-xs uppercase tracking-widest bg-cyan-400 text-black px-3 py-0.5 rounded-3xl">Learned interests</span>
+            <!-- Learned summary banner (full text on hover) -->
+            <div id="learnedBanner" class="hidden relative z-10 group mx-6 mt-4 bg-zinc-800 border border-cyan-300/30 rounded-2xl px-5 py-3 text-sm flex items-center cursor-default">
+                <i data-lucide="sparkles" class="w-4 h-4 text-cyan-400 mr-2 shrink-0"></i>
+                <span id="learnedText" class="flex-1 line-clamp-1 min-w-0"></span>
+                <span class="text-xs uppercase tracking-widest bg-cyan-400 text-black px-3 py-0.5 rounded-3xl shrink-0">Learned interests</span>
+                <div id="learnedBannerTooltip"
+                     class="pointer-events-none group-hover:pointer-events-auto absolute left-0 right-0 top-full z-[90] mt-2 max-h-56 min-h-0 overflow-y-auto overscroll-y-contain rounded-xl border border-cyan-500/25 bg-zinc-900 p-4 text-xs font-normal normal-case text-zinc-200 shadow-2xl whitespace-pre-wrap break-words opacity-0 translate-y-1 transition duration-150 group-hover:opacity-100 group-hover:translate-y-0 [scrollbar-gutter:stable]"></div>
             </div>
 
             <!-- Chat messages: min-h-0 so flex-1 can shrink and overflow-auto scrolls (otherwise only the top bubble is visible). -->
@@ -239,6 +246,53 @@
         </div>
     </div>
 
+    <!-- Toasts (auto-dismiss) -->
+    <div id="toastStack" class="fixed bottom-6 right-6 z-[400] flex flex-col gap-2 items-end pointer-events-none max-w-[min(24rem,calc(100vw-2rem))]" aria-live="polite"></div>
+
+    <!-- Confirm destructive actions -->
+    <div onclick="if(event.target.id==='confirmModal')hideConfirmModal()" id="confirmModal"
+         class="hidden fixed inset-0 z-[320] bg-black/70 flex items-center justify-center p-4">
+        <div onclick="event.stopImmediatePropagation()" class="modal-content bg-zinc-900 border border-zinc-700 rounded-3xl w-full max-w-md p-8 shadow-2xl">
+            <p id="confirmMessage" class="text-zinc-200 leading-relaxed"></p>
+            <div class="flex gap-3 mt-8 justify-end">
+                <button type="button" onclick="hideConfirmModal()" class="px-6 py-3 border border-zinc-600 rounded-2xl hover:bg-zinc-800">Cancel</button>
+                <button type="button" onclick="runPendingConfirm()" class="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-medium rounded-2xl">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add / edit card form -->
+    <div onclick="if(event.target.id==='cardFormModal')closeCardForm()" id="cardFormModal"
+         class="hidden fixed inset-0 z-[310] bg-black/70 flex items-center justify-center p-4">
+        <div onclick="event.stopImmediatePropagation()" class="modal-content bg-zinc-900 border border-zinc-700 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-8 shadow-2xl">
+            <h3 id="cardFormHeading" class="text-xl font-semibold mb-6">New card</h3>
+            <form id="cardForm" class="space-y-5" onsubmit="event.preventDefault(); submitCardForm();">
+                <div>
+                    <label for="cardFormTitle" class="block text-sm font-medium text-zinc-400 mb-2">Title</label>
+                    <input id="cardFormTitle" name="title" required maxlength="120"
+                           class="w-full bg-zinc-800 border border-zinc-700 focus:border-cyan-400 rounded-2xl px-4 py-3 outline-none"
+                           placeholder="e.g. Quantum Computing" autocomplete="off">
+                </div>
+                <div>
+                    <label for="cardFormTopic" class="block text-sm font-medium text-zinc-400 mb-2">Topic / category</label>
+                    <input id="cardFormTopic" name="topic" required maxlength="120"
+                           class="w-full bg-zinc-800 border border-zinc-700 focus:border-cyan-400 rounded-2xl px-4 py-3 outline-none"
+                           placeholder="e.g. Technology" autocomplete="off">
+                </div>
+                <div>
+                    <label for="cardFormQuestion" class="block text-sm font-medium text-zinc-400 mb-2">Initial question for Grok</label>
+                    <textarea id="cardFormQuestion" name="question" required rows="5" maxlength="8000"
+                              class="w-full bg-zinc-800 border border-zinc-700 focus:border-cyan-400 rounded-2xl px-4 py-3 outline-none resize-y min-h-[120px]"
+                              placeholder="What should I know about this topic right now?"></textarea>
+                </div>
+                <div class="flex gap-3 pt-2 justify-end">
+                    <button type="button" onclick="closeCardForm()" class="px-6 py-3 border border-zinc-600 rounded-2xl hover:bg-zinc-800">Cancel</button>
+                    <button type="submit" class="px-6 py-3 bg-cyan-400 hover:bg-cyan-300 text-black font-semibold rounded-2xl">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         // ====================== CONFIG & DATA ======================
         let cards = []
@@ -247,10 +301,79 @@
         let currentChatCardId = null
         let chatAwaitingGrok = false
         let chatErrorText = null
+        let pendingConfirmAction = null
+        let cardFormEditIndex = null
 
         const STORAGE_CARDS = 'grok-cards-v2'
         const STORAGE_CONVERSATIONS = 'grok-conversations-v2'
         const STORAGE_SETTINGS = 'grok-settings-v2'
+
+        function showToast(message, variant = 'info') {
+            const stack = document.getElementById('toastStack')
+            if (!stack || message == null || message === '') return
+            const el = document.createElement('div')
+            const base = 'pointer-events-auto rounded-2xl border px-4 py-3 shadow-xl text-sm transition-all duration-200 ease-out max-w-full toast-enter'
+            const styles = {
+                success: 'border-emerald-500/40 bg-emerald-950/95 text-emerald-100',
+                error: 'border-red-500/40 bg-red-950/95 text-red-100',
+                info: 'border-cyan-500/30 bg-zinc-900/95 text-zinc-100'
+            }
+            el.className = `${base} ${styles[variant] || styles.info}`
+            el.style.whiteSpace = 'pre-wrap'
+            el.style.wordBreak = 'break-word'
+            el.textContent = message
+            stack.appendChild(el)
+            requestAnimationFrame(() => {
+                el.classList.remove('toast-enter')
+                el.classList.add('toast-visible')
+            })
+            setTimeout(() => {
+                el.classList.remove('toast-visible')
+                el.classList.add('toast-leave')
+                setTimeout(() => el.remove(), 220)
+            }, 3000)
+        }
+
+        function hideConfirmModal() {
+            pendingConfirmAction = null
+            const modal = document.getElementById('confirmModal')
+            if (modal) {
+                modal.classList.add('hidden')
+                modal.classList.remove('flex')
+            }
+        }
+
+        function showConfirm(message, onConfirm) {
+            pendingConfirmAction = typeof onConfirm === 'function' ? onConfirm : null
+            const msgEl = document.getElementById('confirmMessage')
+            if (msgEl) msgEl.textContent = message
+            const modal = document.getElementById('confirmModal')
+            if (modal) {
+                modal.classList.remove('hidden')
+                modal.classList.add('flex')
+            }
+            if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons()
+        }
+
+        function runPendingConfirm() {
+            const fn = pendingConfirmAction
+            pendingConfirmAction = null
+            const modal = document.getElementById('confirmModal')
+            if (modal) {
+                modal.classList.add('hidden')
+                modal.classList.remove('flex')
+            }
+            if (fn) fn()
+        }
+
+        function closeCardForm() {
+            cardFormEditIndex = null
+            const m = document.getElementById('cardFormModal')
+            if (m) {
+                m.classList.add('hidden')
+                m.classList.remove('flex')
+            }
+        }
 
         /** Drop invalid turns (e.g. content: null) so API history and UI stay consistent. */
         function sanitizeConversations() {
@@ -413,7 +536,7 @@
                 if (ids.length === 0) {
                     select.disabled = false
                     if (reloadBtn) reloadBtn.disabled = false
-                    fillModelSelectFallback('')
+                    fillModelSelectFallback()
                     setStatus('No models were returned for this key. Using fallback list — pick a model ID you know is enabled.', 'error')
                     return
                 }
@@ -433,14 +556,14 @@
             } catch (e) {
                 select.disabled = false
                 if (reloadBtn) reloadBtn.disabled = false
-                fillModelSelectFallback('')
+                fillModelSelectFallback()
                 setStatus(e.message || 'Could not load models. Using fallback list.', 'error')
             }
         }
 
         async function callGrok(messages) {
             if (!settings.apiKey) {
-                alert('⚠️ Please enter your xAI API key in Settings first!')
+                showToast('Add your xAI API key in Settings first.', 'error')
                 openSettings()
                 return null
             }
@@ -505,6 +628,20 @@ Original question: ${card.initialQuestion}`
         }
 
         // ====================== REFRESH LOGIC ======================
+        function setCardRefreshPhase(cardId, phase) {
+            const btn = document.getElementById('refresh-btn-' + cardId)
+            if (!btn) return
+            btn.disabled = !!phase
+            if (phase === 'compress') {
+                btn.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 text-cyan-400 grok-compress-spin"></i>'
+            } else if (phase === 'fetch') {
+                btn.innerHTML = '<i data-lucide="refresh-cw" class="w-5 h-5 animate-spin text-cyan-400"></i>'
+            } else {
+                btn.innerHTML = '<i data-lucide="refresh-cw" class="w-5 h-5"></i>'
+            }
+            if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons()
+        }
+
         async function refreshCardContent(cardId, isFromChat = false) {
             const cardIndex = cards.findIndex(c => c.id === cardId)
             if (cardIndex === -1) return
@@ -528,10 +665,13 @@ Original question: ${card.initialQuestion}`
 
             // Compress if we have meaningful history
             if (conv.length > 3) {
+                setCardRefreshPhase(cardId, 'compress')
                 summary = await compressConversation(cardId)
                 card.contextSummary = summary
                 card.lastRefreshUsedSummary = true
             }
+
+            setCardRefreshPhase(cardId, 'fetch')
 
             // Build fresh personalized query
             const systemMessage = `You are a world-class expert on ${card.topic}.
@@ -555,7 +695,7 @@ Take into account everything I have expressed interest in during previous conver
                     if (showChatProgress && currentChatCardId === cardId) {
                         chatErrorText = 'Could not refresh. Add or check your xAI API key in Settings.'
                     } else {
-                        alert('Refresh failed: missing API key or cancelled.')
+                        showToast('Refresh failed: missing API key or cancelled.', 'error')
                     }
                     return
                 }
@@ -572,15 +712,16 @@ Take into account everything I have expressed interest in during previous conver
                 renderCards()
 
                 if (!isFromChat) {
-                    alert(`✅ Card “${card.title}” refreshed with your learned interests!`)
+                    showToast(`Card “${card.title}” refreshed with your learned interests.`, 'success')
                 }
             } catch (err) {
                 if (showChatProgress && currentChatCardId === cardId) {
                     chatErrorText = err.message || 'Smart refresh failed. Please try again.'
                 } else {
-                    alert('Refresh failed: ' + err.message)
+                    showToast('Refresh failed: ' + err.message, 'error')
                 }
             } finally {
+                setCardRefreshPhase(cardId, null)
                 if (cardEl) cardEl.style.opacity = '1'
                 if (showChatProgress) {
                     chatAwaitingGrok = false
@@ -593,6 +734,7 @@ Take into account everything I have expressed interest in during previous conver
         }
 
         async function refreshAllCards() {
+            closeMenu()
             for (const card of cards) {
                 await refreshCardContent(card.id)
                 // tiny pause for UX
@@ -644,13 +786,16 @@ Take into account everything I have expressed interest in during previous conver
             // Show learned banner if we have a summary
             const banner = document.getElementById('learnedBanner')
             const text = document.getElementById('learnedText')
+            const tip = document.getElementById('learnedBannerTooltip')
             if (card.contextSummary) {
                 banner.classList.remove('hidden')
                 text.textContent = card.contextSummary.length > 110 
                     ? card.contextSummary.substring(0, 107) + '…' 
                     : card.contextSummary
+                if (tip) tip.textContent = card.contextSummary
             } else {
                 banner.classList.add('hidden')
+                if (tip) tip.textContent = ''
             }
 
             document.getElementById('chatModal').classList.remove('hidden')
@@ -760,12 +905,6 @@ Take into account everything I have expressed interest in during previous conver
             }, 400)
         }
 
-        function showSummaryDetail() {
-            const card = cards.find(c => c.id === currentChatCardId)
-            if (!card || !card.contextSummary) return
-            alert('Learned context for this card:\n\n' + card.contextSummary)
-        }
-
         // ====================== CARD RENDERING ======================
         function renderCards() {
             const grid = document.getElementById('cardsGrid')
@@ -796,8 +935,11 @@ Take into account everything I have expressed interest in during previous conver
                             <span class="inline-block text-xs bg-zinc-800 text-cyan-300 px-3 py-1 mt-1 rounded-3xl">${card.topic}</span>
                         </div>
                         <div class="flex items-center gap-x-2">
-                            ${card.contextSummary ? `<span onclick="event.stopImmediatePropagation();showContextSummary('${card.id}');" class="text-[10px] flex items-center bg-emerald-300 text-emerald-950 px-2 py-px rounded-3xl cursor-pointer"><i data-lucide="sparkles" class="w-3 h-3 mr-px"></i>learned</span>` : ''}
-                            <button onclick="event.stopImmediatePropagation();refreshCardContent('${card.id}');" class="text-zinc-400 hover:text-cyan-400">
+                            ${card.contextSummary ? `<span class="relative z-20 inline-flex max-w-full group" onclick="event.stopImmediatePropagation()">
+                                <span class="text-[10px] flex items-center bg-emerald-300 text-emerald-950 px-2 py-px rounded-3xl cursor-default shrink-0"><i data-lucide="sparkles" class="w-3 h-3 mr-px"></i>learned</span>
+                                <span class="pointer-events-none absolute left-0 top-full mt-1.5 z-[80] w-72 max-w-[min(18rem,calc(100vw-2rem))] max-h-48 overflow-y-auto rounded-xl border border-zinc-600 bg-zinc-900 p-3 text-[11px] font-normal text-zinc-200 shadow-xl whitespace-pre-wrap break-words opacity-0 translate-y-0.5 transition duration-150 group-hover:opacity-100 group-hover:translate-y-0">${escapeHtml(card.contextSummary)}</span>
+                            </span>` : ''}
+                            <button type="button" id="refresh-btn-${card.id}" onclick="event.stopImmediatePropagation();refreshCardContent('${card.id}');" class="text-zinc-400 hover:text-cyan-400 disabled:opacity-60 disabled:pointer-events-none shrink-0">
                                 <i data-lucide="refresh-cw" class="w-5 h-5"></i>
                             </button>
                         </div>
@@ -829,15 +971,9 @@ Take into account everything I have expressed interest in during previous conver
             return `${Math.floor(hours / 24)}d ago`
         }
 
-        function showContextSummary(id) {
-            const card = cards.find(c => c.id === id)
-            if (card && card.contextSummary) {
-                alert('Current learned context for this card:\n\n' + card.contextSummary)
-            }
-        }
-
         // ====================== CUSTOMIZE ======================
         function showCustomizeModal() {
+            closeMenu()
             hideModals()
             const modal = document.getElementById('customizeModal')
             modal.classList.remove('hidden')
@@ -849,14 +985,16 @@ Take into account everything I have expressed interest in during previous conver
             cards.forEach((card, i) => {
                 const row = document.createElement('div')
                 row.className = 'flex items-center justify-between bg-zinc-800 rounded-2xl px-5 py-4'
+                const q = card.initialQuestion
+                const qPrev = q.length > 60 ? escapeHtml(q.slice(0, 60)) + '…' : escapeHtml(q)
                 row.innerHTML = `
-                    <div class="flex-1">
-                        <div class="font-medium">${card.title}</div>
-                        <div class="text-xs text-zinc-400">${card.topic} • ${card.initialQuestion.substring(0, 60)}…</div>
+                    <div class="flex-1 min-w-0 pr-3">
+                        <div class="font-medium truncate">${escapeHtml(card.title)}</div>
+                        <div class="text-xs text-zinc-400 truncate">${escapeHtml(card.topic)} • ${qPrev}</div>
                     </div>
-                    <div class="flex gap-x-2">
-                        <button onclick="editCard(${i});event.stopImmediatePropagation()" class="px-4 py-2 text-xs border border-zinc-600 rounded-2xl hover:bg-zinc-700">Edit</button>
-                        <button onclick="deleteCard(${i});event.stopImmediatePropagation()" class="px-4 py-2 text-xs text-red-400 border border-red-400/30 rounded-2xl hover:bg-red-950/40">Delete</button>
+                    <div class="flex gap-x-2 shrink-0">
+                        <button type="button" onclick="editCard(${i});event.stopImmediatePropagation()" class="px-4 py-2 text-xs border border-zinc-600 rounded-2xl hover:bg-zinc-700">Edit</button>
+                        <button type="button" onclick="deleteCard(${i});event.stopImmediatePropagation()" class="px-4 py-2 text-xs text-red-400 border border-red-400/30 rounded-2xl hover:bg-red-950/40">Delete</button>
                     </div>
                 `
                 container.appendChild(row)
@@ -865,56 +1003,95 @@ Take into account everything I have expressed interest in during previous conver
             if (cards.length === 0) {
                 container.innerHTML = `<p class="text-zinc-400 text-center py-12">No cards yet. Add one above!</p>`
             }
+            if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons()
         }
 
-        function addNewCard() {
-            const title = prompt('Card title (e.g. Quantum Computing)', 'New Topic')
-            if (!title) return
-            const topic = prompt('Topic / category', 'Technology')
-            const question = prompt('Initial question to ask Grok', 'What should I know about this topic right now?')
-            if (!question) return
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+        }
 
-            const newCard = {
-                id: 'card-' + crypto.randomUUID().slice(0, 8),
-                title: title,
-                topic: topic,
-                initialQuestion: question,
-                contextSummary: '',
-                lastUpdated: Date.now()
-            }
-
-            cards.push(newCard)
-            saveData()
-            renderCards()
-            showCustomizeModal() // refresh list
+        function openNewCardForm() {
+            cardFormEditIndex = null
+            document.getElementById('cardFormHeading').textContent = 'New card'
+            document.getElementById('cardFormTitle').value = ''
+            document.getElementById('cardFormTopic').value = ''
+            document.getElementById('cardFormQuestion').value = ''
+            const m = document.getElementById('cardFormModal')
+            m.classList.remove('hidden')
+            m.classList.add('flex')
+            requestAnimationFrame(() => document.getElementById('cardFormTitle').focus())
+            if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons()
         }
 
         function editCard(index) {
             const card = cards[index]
-            const title = prompt('Edit title', card.title)
-            if (title) card.title = title
-            const topic = prompt('Edit topic', card.topic)
-            if (topic) card.topic = topic
-            const q = prompt('Edit initial question', card.initialQuestion)
-            if (q) card.initialQuestion = q
+            if (!card) return
+            cardFormEditIndex = index
+            document.getElementById('cardFormHeading').textContent = 'Edit card'
+            document.getElementById('cardFormTitle').value = card.title
+            document.getElementById('cardFormTopic').value = card.topic
+            document.getElementById('cardFormQuestion').value = card.initialQuestion
+            const m = document.getElementById('cardFormModal')
+            m.classList.remove('hidden')
+            m.classList.add('flex')
+            requestAnimationFrame(() => document.getElementById('cardFormTitle').focus())
+            if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons()
+        }
 
+        function submitCardForm() {
+            const title = document.getElementById('cardFormTitle').value.trim()
+            const topic = document.getElementById('cardFormTopic').value.trim()
+            const question = document.getElementById('cardFormQuestion').value.trim()
+            if (!title || !topic || !question) {
+                showToast('Please fill in title, topic, and question.', 'error')
+                return
+            }
+            if (cardFormEditIndex === null) {
+                cards.push({
+                    id: 'card-' + crypto.randomUUID().slice(0, 8),
+                    title,
+                    topic,
+                    initialQuestion: question,
+                    contextSummary: '',
+                    lastUpdated: Date.now()
+                })
+                showToast('Card added.', 'success')
+            } else {
+                const card = cards[cardFormEditIndex]
+                if (!card) {
+                    closeCardForm()
+                    return
+                }
+                card.title = title
+                card.topic = topic
+                card.initialQuestion = question
+                showToast('Card updated.', 'success')
+            }
             saveData()
             renderCards()
+            closeCardForm()
             showCustomizeModal()
         }
 
         function deleteCard(index) {
-            if (!confirm('Delete this card and its entire conversation history?')) return
-            const id = cards[index].id
-            delete conversations[id]
-            cards.splice(index, 1)
-            saveData()
-            renderCards()
-            showCustomizeModal()
+            showConfirm('Delete this card and its entire conversation history?', () => {
+                const id = cards[index].id
+                delete conversations[id]
+                cards.splice(index, 1)
+                saveData()
+                renderCards()
+                showCustomizeModal()
+                showToast('Card deleted.', 'success')
+            })
         }
 
         // ====================== SETTINGS ======================
         function openSettings() {
+            closeMenu()
             hideModals()
             const modal = document.getElementById('settingsModal')
             modal.classList.remove('hidden')
@@ -929,20 +1106,40 @@ Take into account everything I have expressed interest in during previous conver
             settings.apiKey = document.getElementById('apiKeyInput').value.trim()
             settings.model = document.getElementById('modelSelect').value
             saveData()
-            alert('✅ Settings saved. Your key is stored only in this browser.')
+            showToast('Settings saved. Your key stays only in this browser.', 'success')
         }
 
         // ====================== UTILITIES ======================
+        function closeMenu() {
+            const menu = document.getElementById('menuDropdown')
+            if (menu) menu.classList.add('hidden')
+        }
+
         function toggleMenu() {
             const menu = document.getElementById('menuDropdown')
             menu.classList.toggle('hidden')
         }
 
+        function onDocumentClickCloseMenu(e) {
+            const menu = document.getElementById('menuDropdown')
+            if (!menu || menu.classList.contains('hidden')) return
+            const nav = document.getElementById('mainNav')
+            if (nav && nav.contains(e.target)) return
+            if (menu.contains(e.target)) return
+            closeMenu()
+        }
+
         function hideModals() {
-            document.querySelectorAll('.fixed.inset-0').forEach(modal => {
-                modal.classList.add('hidden')
-                modal.classList.remove('flex')
+            ;['settingsModal', 'customizeModal', 'chatModal'].forEach(id => {
+                const el = document.getElementById(id)
+                if (el) {
+                    el.classList.add('hidden')
+                    el.classList.remove('flex')
+                }
             })
+            hideConfirmModal()
+            closeCardForm()
+            closeMenu()
             chatAwaitingGrok = false
             chatErrorText = null
             setChatComposerDisabled(false)
@@ -950,6 +1147,7 @@ Take into account everything I have expressed interest in during previous conver
         }
 
         function exportData() {
+            closeMenu()
             const data = {
                 cards: cards,
                 conversations: conversations,
@@ -966,6 +1164,7 @@ Take into account everything I have expressed interest in during previous conver
         }
 
         function importData() {
+            closeMenu()
             const input = document.createElement('input')
             input.type = 'file'
             input.accept = '.json'
@@ -981,9 +1180,9 @@ Take into account everything I have expressed interest in during previous conver
                         sanitizeConversations()
                         saveData()
                         renderCards()
-                        alert('✅ Import successful!')
+                        showToast('Import successful.', 'success')
                     } catch (err) {
-                        alert('Import failed – invalid file')
+                        showToast('Import failed — invalid or corrupted file.', 'error')
                     }
                 }
                 reader.readAsText(file)
@@ -993,15 +1192,18 @@ Take into account everything I have expressed interest in during previous conver
         }
 
         function resetAllData() {
-            if (!confirm('Delete ALL cards, conversations and settings? This cannot be undone.')) return
-            localStorage.removeItem(STORAGE_CARDS)
-            localStorage.removeItem(STORAGE_CONVERSATIONS)
-            localStorage.removeItem(STORAGE_SETTINGS)
-            cards = []
-            conversations = {}
-            settings = { apiKey: '', model: 'grok-4' }
-            renderCards()
-            hideModals()
+            closeMenu()
+            showConfirm('Delete ALL cards, conversations and settings? This cannot be undone.', () => {
+                localStorage.removeItem(STORAGE_CARDS)
+                localStorage.removeItem(STORAGE_CONVERSATIONS)
+                localStorage.removeItem(STORAGE_SETTINGS)
+                cards = []
+                conversations = {}
+                settings = { apiKey: '', model: 'grok-4' }
+                renderCards()
+                hideModals()
+                showToast('All data was reset.', 'success')
+            })
         }
 
         // ====================== BOOTSTRAP ======================
@@ -1013,6 +1215,7 @@ Take into account everything I have expressed interest in during previous conver
             loadData()
             renderCards()
             lucide.createIcons()
+            document.addEventListener('click', onDocumentClickCloseMenu)
 
             console.log('%c🚀 Grok Topic Cards v2 ready – smart refresh & conversation compression enabled!', 'color:#00f0ff; font-family:monospace')
         })
