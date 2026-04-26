@@ -216,7 +216,7 @@
             </div>
 
             <!-- Learned summary banner (full text on hover) -->
-            <div id="learnedBanner" class="hidden relative z-10 group mx-6 mt-4 bg-zinc-800 border border-cyan-300/30 rounded-2xl px-5 py-3 text-sm flex items-center cursor-default">
+            <div id="learnedBanner" class="hidden relative z-10 group mx-6 mt-4 bg-zinc-800 border border-cyan-300/30 rounded-2xl px-5 py-3 text-sm flex items-center cursor-default after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:z-[88] after:h-5 after:pointer-events-auto">
                 <i data-lucide="sparkles" class="w-4 h-4 text-cyan-400 mr-2 shrink-0"></i>
                 <span id="learnedText" class="flex-1 line-clamp-1 min-w-0"></span>
                 <span class="text-xs uppercase tracking-widest bg-cyan-400 text-black px-3 py-0.5 rounded-3xl shrink-0">Learned interests</span>
@@ -935,9 +935,9 @@ Take into account everything I have expressed interest in during previous conver
                             <span class="inline-block text-xs bg-zinc-800 text-cyan-300 px-3 py-1 mt-1 rounded-3xl">${card.topic}</span>
                         </div>
                         <div class="flex items-center gap-x-2">
-                            ${card.contextSummary ? `<span class="relative z-20 inline-flex max-w-full group" onclick="event.stopImmediatePropagation()">
+                            ${card.contextSummary ? `<span class="relative z-20 inline-flex max-w-full group after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:z-[79] after:h-5 after:pointer-events-auto" onclick="event.stopImmediatePropagation()">
                                 <span class="text-[10px] flex items-center bg-emerald-300 text-emerald-950 px-2 py-px rounded-3xl cursor-default shrink-0"><i data-lucide="sparkles" class="w-3 h-3 mr-px"></i>learned</span>
-                                <span class="pointer-events-none absolute left-0 top-full mt-1.5 z-[80] w-72 max-w-[min(18rem,calc(100vw-2rem))] max-h-48 overflow-y-auto rounded-xl border border-zinc-600 bg-zinc-900 p-3 text-[11px] font-normal text-zinc-200 shadow-xl whitespace-pre-wrap break-words opacity-0 translate-y-0.5 transition duration-150 group-hover:opacity-100 group-hover:translate-y-0">${escapeHtml(card.contextSummary)}</span>
+                                <span class="pointer-events-none group-hover:pointer-events-auto absolute left-0 top-full z-[80] mt-1.5 w-72 max-w-[min(18rem,calc(100vw-2rem))] max-h-48 overflow-y-auto overscroll-y-contain rounded-xl border border-zinc-600 bg-zinc-900 p-3 text-[11px] font-normal text-zinc-200 shadow-xl whitespace-pre-wrap break-words opacity-0 translate-y-0.5 transition duration-150 group-hover:opacity-100 group-hover:translate-y-0">${escapeHtml(card.contextSummary)}</span>
                             </span>` : ''}
                             <button type="button" id="refresh-btn-${card.id}" onclick="event.stopImmediatePropagation();refreshCardContent('${card.id}');" class="text-zinc-400 hover:text-cyan-400 disabled:opacity-60 disabled:pointer-events-none shrink-0">
                                 <i data-lucide="refresh-cw" class="w-5 h-5"></i>
